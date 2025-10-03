@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>MailAura — refined interactive banner</title>
+<style>
+  :root{
+    --header-h: 64px;
+    --logo-size: 48px;
+    --gap: 14px;
+    --bg-top: #d8eefc;   /* light blue */
+    --bg-bottom: #ffffff;/* white */
+    --sky-blue: #7bd7ff; /* collapsed color */
+    --rounded-offset: 12px; /* inset from edges so header rounding shows */
+    --content-max: 1100px;
+    --muted: #5f7b89;
+    --card-bg: rgba(255,255,255,0.9);
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
+
+  body{
+    background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 70%);
+    min-height:200vh; /* for scroll testing; remove if you want exact minimal page */
+    color: #073049;
+    position: relative;
+  }
+
+  /* Animated background gradient */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 1.5s ease;
+  }
+  
+  body.scrolled::before {
+    opacity: 1;
+  }
+
+  /* Rounded glass header inset from edges */
+  .main-header {
+    position:fixed;
+    top:var(--rounded-offset);
+    left:var(--rounded-offset);
+    right:var(--rounded-offset);
+    height:var(--header-h);
+    display:flex;
+    align-items:center;
+    gap:var(--gap);
+    padding:10px 20px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.42), rgba(255,255,255,0.16));
+    backdrop-filter: blur(10px) saturate(120%);
+    -webkit-backdrop-filter: blur(10px) saturate(120%);
+    border: 1px solid rgba(255,255,255,0.28);
+    border-radius:14px;
+    box-shadow: 0 12px 34px rgba(10,30,60,0.06);
+    z-index:1400;
+    pointer-events:auto;
+  }
+
+  /* Logo — hidden at first, appears when title collapses */
+  .logo-head {
+    width:var(--logo-size);
+    height:var(--logo-size);
+    border-radius:50%;
+    object-fit:cover;
+    display:block;
+    flex-shrink:0;
+    opacity:0;
+    transform: translateX(-10px) scale(.94);
+    transition: opacity .42s cubic-bezier(.22,.9,.32,1), transform .42s cubic-bezier(.22,.9,.32,1);
+    background: linear-gradient(180deg,#ffffff,#eef7ff);
+    border: 1px solid rgba(255,255,255,0.6);
+    box-shadow: 0 8px 24px rgba(10,30,60,0.05);
+  }
+  body.title-collapsed .logo-head { opacity:1; transform:none; }
+
+  /* Header action buttons container (right side) */
+  .header-actions {
+    margin-left: auto;
+    display:flex;
+    gap:12px;
+    align-items:center;
+  }
+
+  /* Gradient button (primary) */
+  .btn , .btn-outline{
+    padding: 10px 20px;
+    border-radius: 24px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid rgba(135,214,255,0.3);
+    background: linear-gradient(135deg, rgba(255,255,255,0.85) 0%, rgba(216,238,252,0.75) 100%);
+    color: #2b7fb8;
+    box-shadow: 0 2px 8px rgba(15,30,60,0.08);
+    transition: all 0.3s cubic-bezier(.22,.9,.32,1);
+    cursor: pointer;
+    white-space: nowrap; /* Prevent button text wrapping */
+  }
+  .btn:hover,.btn-outline:hover{
+    background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(230,249,255,0.85) 100%);
+    box-shadow: 0 4px 12px rgba(15,30,60,0.12);
+    transform: translateY(-1px);
+  }
+  .btn:active, .btn-outline:active{
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(15,30,60,0.1);
+  }
+
+  /* Banner (full-screen overlay with big centered title) */
+  .banner { 
+    position:fixed; 
+    inset:0; 
+    pointer-events:none; 
+    z-index:1500; 
+    overflow:visible; 
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* SITE TITLE */
+  .site-title {
+    position:fixed;
+    left:50%;
+    top:50%;
+    transform: translateX(-50%) translateY(-50%) scale(1);
+    pointer-events:auto;
+    font-weight:900;
+    line-height:0.92;
+    letter-spacing:-2px;
+    white-space:nowrap;
+    /* refined gradient fill */
+    background: linear-gradient(90deg,#dfffff 0%, #9fe9ff 50%, #ffffff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 12px 30px rgba(3,24,56,0.10), 0 1px 4px rgba(3,24,56,0.06); /* reduced blur */
+    transition: color .26s ease, text-shadow .26s ease;
+    z-index:1600; /* default while collapsed behavior handled in JS */
+    will-change: transform, font-size;
+    display:inline-block;
+    position:fixed;
+    max-width: 90vw; /* Prevent overflow on small screens */
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Layered solid text to smoothly fade in over gradient */
+  .site-title .title-solid{
+    position:absolute;
+    left:0; top:0;
+    right:auto;
+    bottom:auto;
+    color:var(--sky-blue);
+    -webkit-background-clip: unset;
+    background-clip: unset;
+    pointer-events:none;
+    opacity:0;
+    font-weight:900;
+    line-height:0.92;
+    white-space:nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* collapsed style uses solid sky-blue color (for accessibility we keep class but opacity of solid span will be 1 when collapsed) */
+  .site-title.small {
+    -webkit-background-clip: unset;
+    background-clip: unset;
+    color: var(--sky-blue);
+    text-shadow: 0 1px 6px rgba(12,45,60,0.08);
+  }
+
+  .site-title:focus { outline: 3px solid rgba(123,215,255,0.18); outline-offset:6px; border-radius:4px; }
+
+  @media (max-width:720px){
+    .site-title { 
+      top:50%; 
+      font-weight:800; 
+      letter-spacing:-1.5px; 
+      max-width: 85vw; /* Further restrict width on mobile */
+    }
+    .site-title.small { 
+      font-size:14px !important; 
+      left: calc(var(--rounded-offset) + 68px) !important; 
+      max-width: calc(100vw - 120px); /* Prevent overflow in collapsed state */
+    }
+    .main-header { padding:8px 12px; }
+    .header-actions {
+      gap: 8px; /* Reduce gap on small screens */
+    }
+    .btn, .btn-outline {
+      padding: 8px 14px; /* Smaller buttons on mobile */
+      font-size: 13px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .site-title {
+      font-size: 12vw !important; /* Responsive font size for very small screens */
+    }
+    .header-actions {
+      flex-wrap: wrap; /* Allow buttons to wrap if needed */
+      justify-content: flex-end;
+    }
+  }
+
+  /* --- New content styles (scoped, minimal and coherent with theme) --- */
+  main#content { 
+    position:relative; 
+    margin: 100vh auto 80px; /* Start after the banner area */
+    max-width:var(--content-max); 
+    padding:20px; /* Reduced padding for mobile */
+    z-index:1200; /* Lower than header so content scrolls behind */
+    width: 100%;
+    box-sizing: border-box;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.8s ease, transform 0.8s ease;
+  }
+  
+  main#content.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  
+  .section { 
+    margin: 36px 0; 
+    overflow: hidden; /* Contain floats and prevent overflow */
+  }
+  
+  .intro { display:flex; gap:28px; align-items:center; }
+  .intro .copy { flex:1; min-width: 0; /* Allow text truncation */ }
+  .intro h2 { 
+    font-size:28px; 
+    margin:0 0 10px; 
+    line-height: 1.2;
+    word-wrap: break-word; /* Prevent long words from breaking layout */
+  }
+  .intro p { 
+    margin:0 0 18px; 
+    color:var(--muted); 
+    line-height: 1.5;
+  }
+
+  .features-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }
+  .feature { 
+    background:var(--card-bg); 
+    padding:16px; 
+    border-radius:12px; 
+    box-shadow:0 6px 18px rgba(10,30,60,0.04);
+    overflow: hidden; /* Prevent content overflow */
+  }
+  .feature h4 { margin:0 0 8px; line-height: 1.3; }
+  .feature p { margin:0; color:var(--muted); font-size:14px; line-height: 1.4; }
+
+  .why-list { display:flex; gap:12px; flex-direction:column; }
+  .why-item { 
+    background:transparent; 
+    padding:12px 8px; 
+    border-left:3px solid rgba(123,215,255,0.6);
+    overflow: hidden; /* Prevent text overflow */
+  }
+  .why-item p { margin:0; color:var(--muted); line-height: 1.4; }
+
+  .use-cases { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
+  .case { 
+    background:var(--card-bg); 
+    padding:12px; 
+    border-radius:10px;
+    overflow: hidden; /* Prevent content overflow */
+  }
+  .case p { line-height: 1.4; }
+
+  .visuals { display:flex; gap:14px; align-items:center; }
+  .visuals img { 
+    width:100%; 
+    max-width:420px; 
+    border-radius:10px; 
+    box-shadow:0 12px 28px rgba(10,30,60,0.06);
+    height: auto; /* Maintain aspect ratio */
+  }
+
+  .testimonials { display:flex; gap:12px; }
+  .testimonial { 
+    background:var(--card-bg); 
+    padding:12px; 
+    border-radius:10px; 
+    flex:1;
+    overflow: hidden; /* Prevent content overflow */
+  }
+  .testimonial p { margin:0 0 8px; color:var(--muted); line-height: 1.4; }
+
+  .pricing-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .plan { 
+    background:var(--card-bg); 
+    padding:18px; 
+    border-radius:12px; 
+    text-align:center;
+    overflow: hidden; /* Prevent content overflow */
+  }
+  .plan h3 { margin:0 0 6px; line-height: 1.3; }
+  .plan p { color:var(--muted); font-size:14px; line-height: 1.4; }
+
+  .faq dt { font-weight:700; margin-top:12px; line-height: 1.3; }
+  .faq dd { margin:6px 0 12px; color:var(--muted); line-height: 1.4; }
+
+  footer.site-footer { 
+    margin-top:30px; 
+    padding:20px; 
+    text-align:center; 
+    color:var(--muted); 
+    overflow: hidden; /* Prevent content overflow */
+  }
+  footer.site-footer a { color: #2b7fb8; text-decoration:none; margin:0 8px; white-space: nowrap; }
+
+  /* Add line-height and word-wrap to all text elements for better readability */
+  h1, h2, h3, h4, h5, h6, p, li, dt, dd {
+    line-height: 1.4;
+    word-wrap: break-word;
+  }
+
+  /* responsive adjustments */
+  @media (max-width:900px){
+    .features-grid{ grid-template-columns:repeat(2,1fr) }
+    .use-cases{ grid-template-columns:1fr }
+    .visuals{ flex-direction:column }
+    .intro { flex-direction:column; align-items:flex-start }
+    .testimonials { flex-direction: column; }
+  }
+  @media (max-width:560px){
+    .features-grid{ grid-template-columns:1fr }
+    .pricing-grid{ grid-template-columns:1fr }
+    main#content { padding: 16px; } /* More padding reduction for very small screens */
+  }
+
+  /* Fix for muted class - was missing in original CSS */
+  .muted {
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+  <!-- Banner / big title -->
+  <header class="banner" aria-hidden="false">
+    <!-- layered title: gradient layer is the main link text, .title-solid is absolute copy used for smooth transition -->
+    <a id="siteTitle" class="site-title" href="#" title="MailAura">MailAura<span class="title-solid">MailAura</span></a>
+  </header>
+
+  <!-- Rounded glass header with logo & actions -->
+  <header class="main-header" id="mainHeader" role="banner" aria-label="Main header">
+    <img id="logoHead" class="logo-head" src="vector-bright-splashes.svg" alt="MailAura logo" />
+
+    <div class="header-actions" role="navigation" aria-label="Header actions">
+      <a class="btn" id="homeBtn" href="#content">Home</a>
+      <a class="btn-outline" id="helpBtn" href="#contact">Contact US</a>
+    </div>
+  </header>
+
+  <!-- Main content: added sections - kept lightweight and aligned to existing theme -->
+  <main id="content">
+
+    <!-- Intro / Hero-like copy (keeps the original big banner; this is supportive intro) -->
+    <section class="section intro" id="intro">
+      <div class="copy">
+        <h2>Automate your emails. Save time. Grow faster.</h2>
+        <p>Send personalized campaigns, schedule follow-ups, and track performance—all from one refined dashboard built for teams and creators.</p>
+        <p>
+          <a class="btn" href="#features">Get Started</a>
+          <a class="btn-outline" href="#pricing" style="margin-left:8px">See Pricing</a>
+        </p>
+      </div>
+      <div class="visuals">
+        <!-- lightweight placeholder image. Replace with real dashboard screenshot when available -->
+        <img alt="dashboard preview" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='720' height='420'><rect width='100%' height='100%' fill='%23eef7ff'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%2393c9e6' font-family='Arial' font-size='18'>Dashboard preview placeholder</text></svg>"/>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="section" id="features">
+      <h3>Features</h3>
+      <div class="features-grid" aria-hidden="false">
+        <div class="feature">
+          <h4>Drip Campaigns</h4>
+          <p>Send a series of emails automatically based on customer behavior and lifecycle stage.</p>
+        </div>
+        <div class="feature">
+          <h4>Personalization</h4>
+          <p>Use customer names, purchase history, and preferences to boost engagement.</p>
+        </div>
+        <div class="feature">
+          <h4>Scheduling</h4>
+          <p>Plan emails in advance and reach your audience at the optimal time.</p>
+        </div>
+        <div class="feature">
+          <h4>Analytics</h4>
+          <p>Track open rates, clicks, deliverability and conversion metrics in one place.</p>
+        </div>
+        <div class="feature">
+          <h4>Integrations</h4>
+          <p>Connect with CRMs, Shopify, WordPress, and common marketing tools via API and webhooks.</p>
+        </div>
+        <div class="feature">
+          <h4>Compliance</h4>
+          <p>Built-in unsubscribe handling, GDPR-friendly data controls and CAN-SPAM alignment.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Why choose us -->
+    <section class="section" id="why">
+      <h3>Why Choose MailAura</h3>
+      <div class="why-list">
+        <div class="why-item"><strong>Saves time:</strong> Automate repetitive messaging and follow-ups.</div>
+        <div class="why-item"><strong>Boosts engagement:</strong> Smart targeting and personalization increase open and click rates.</div>
+        <div class="why-item"><strong>Easy to set up:</strong> Drag-and-drop builder and pre-made templates—no coding required.</div>
+        <div class="why-item"><strong>Security & Compliance:</strong> GDPR & CAN-SPAM compliant workflows and safe data handling.</div>
+      </div>
+    </section>
+
+    <!-- Use cases -->
+    <section class="section" id="usecases">
+      <h3>Use Cases</h3>
+      <div class="use-cases">
+        <div class="case"><strong>E‑commerce</strong><p class="muted">Abandoned cart reminders, post-purchase sequences, and promotional blasts.</p></div>
+        <div class="case"><strong>SaaS</strong><p class="muted">Onboarding email sequences, feature announcements, and retention journeys.</p></div>
+        <div class="case"><strong>Bloggers</strong><p class="muted">Automated newsletters and content digests.</p></div>
+        <div class="case"><strong>Agencies</strong><p class="muted">Multi-client workflows, white-label reporting, and client follow-ups.</p></div>
+      </div>
+    </section>
+
+    <!-- Visuals (placeholder/demo) -->
+    <section class="section" id="visuals">
+      <h3>Visuals</h3>
+      <div class="visuals">
+        <img alt="mock analytics graph" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='560' height='280'><rect width='100%' height='100%' fill='%23ffffff'/><polyline points='10,230 90,190 170,160 250,140 330,120 410,100 490,80' fill='none' stroke='%237bd7ff' stroke-width='8' stroke-linecap='round' stroke-linejoin='round' opacity='0.9'/><text x='12' y='18' font-size='12' fill='%23777'>Analytics preview</text></svg>" />
+        <div style="flex:1">
+          <p style="color:var(--muted)">Replace the placeholders above with a real dashboard screenshot and an animated flow demo when available. Keep images landscape and under 800px for best layout.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section class="section" id="testimonials">
+      <h3>Testimonials</h3>
+      <div class="testimonials">
+        <div class="testimonial"><p>“This tool cut our email marketing time in half!”</p><small>— Alex, Growth Lead</small></div>
+        <div class="testimonial"><p>“Easy to set up and the reporting is clear.”</p><small>— Priya, E‑commerce</small></div>
+      </div>
+    </section>
+
+    <!-- Pricing -->
+    <section class="section" id="pricing">
+      <h3>Pricing</h3>
+      <div class="pricing-grid">
+        <div class="plan">
+          <h3>Free</h3>
+          <p>Limited emails • Basic automations • Community support</p>
+          <p><a class="btn" href="#">Start Free</a></p>
+        </div>
+        <div class="plan">
+          <h3>Pro</h3>
+          <p>Advanced automations • Analytics • Integrations</p>
+          <p><a class="btn" href="#">Upgrade</a></p>
+        </div>
+        <div class="plan">
+          <h3>Business</h3>
+          <p>Unlimited emails • Priority support • Enterprise features</p>
+          <p><a class="btn" href="#">Contact Sales</a></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="section" id="faq">
+      <h3>FAQ</h3>
+      <dl class="faq">
+        <dt>Can I integrate with Gmail/Outlook?</dt>
+        <dd>Yes — connect via standard SMTP/IMAP or use our native integrations and API connectors.</dd>
+        <dt>Is my customer data secure?</dt>
+        <dd>We follow industry best practices for data encryption, access controls, and provide GDPR controls for data management.</dd>
+        <dt>Do I need coding skills?</dt>
+        <dd>No — the drag-and-drop builder covers most workflows, though you can use HTML for advanced templates.</dd>
+      </dl>
+    </section>
+
+    <!-- Contact & Support -->
+    <section class="section" id="contact">
+      <h3>Contact & Support</h3>
+      <p style="color:var(--muted)">Live chat, email support, and an extensive knowledge base are available. For enterprise or priority requests, contact our sales team.</p>
+      <p><a class="btn" href="mailto:support@mailaura.example">Email Support</a> <a class="btn-outline" href="#">Knowledge Base</a></p>
+    </section>
+
+    <!-- Footer -->
+    <footer class="site-footer">
+      <div>
+        <a href="#">Privacy Policy</a> • <a href="#">Terms of Service</a> • <a href="#">Unsubscribe Policy</a>
+      </div>
+      <div style="margin-top:8px">Follow us: <a href="#">Twitter</a> <a href="#">LinkedIn</a></div>
+    </footer>
+
+  </main>
+
+<script>
+/* Updated progressive shrink and alignment logic - preserved originally but adjusted z-index + smooth color transition */
+
+(function(){
+  const siteTitle = document.getElementById('siteTitle');
+  const titleSolid = siteTitle.querySelector('.title-solid');
+  const mainHeader = document.getElementById('mainHeader');
+  const logo = document.getElementById('logoHead');
+  const content = document.getElementById('content');
+  const body = document.body;
+
+  const COLLAPSE_VIEWPORTS = 1.0; // amount of viewport scroll to collapse fully
+  const COLLAPSED_FONT = 18;      // px
+  const START_TOP_VH = 50;        // starting top (vh) - centered
+  const BIG_VW = 20.5;            // big font in vw
+
+  const lerp = (a,b,t) => a + (b-a) * t;
+  const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
+
+  function compute(){
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const bigFontPx = vw * (BIG_VW / 100);
+    const startLeftCenter = vw / 2;
+    const startTop = vh * (START_TOP_VH / 100);
+
+    const headerRect = mainHeader.getBoundingClientRect();
+    const headerStyle = getComputedStyle(mainHeader);
+    const paddingLeft = parseFloat(headerStyle.paddingLeft) || 20;
+    const roundedOffset = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--rounded-offset')) || 12;
+
+    // collapsed left is headerRect.left + paddingLeft + logo width + gap
+    const logoW = logo.getBoundingClientRect().width || parseFloat(getComputedStyle(logo).width) || 48;
+    const gap = 14;
+    const collapsedLeft = Math.round(headerRect.left + paddingLeft + logoW + gap);
+
+    const collapsedTop = Math.round(headerRect.top + (headerRect.height - COLLAPSED_FONT)/2);
+
+    return { vw, vh, bigFontPx, startLeftCenter, startTop, collapsedLeft, collapsedTop };
+  }
+
+  let geo = compute();
+
+  function update(){
+    const scrollY = window.scrollY || window.pageYOffset;
+    const progress = clamp(scrollY / (geo.vh * COLLAPSE_VIEWPORTS), 0, 1);
+    const eased = Math.sin(progress * Math.PI / 2); // ease-out
+
+    const fontPx = lerp(geo.bigFontPx, COLLAPSED_FONT, eased);
+    siteTitle.style.fontSize = fontPx + 'px';
+    titleSolid.style.fontSize = fontPx + 'px';
+
+    const deltaX = geo.collapsedLeft - geo.startLeftCenter;
+    const deltaY = geo.collapsedTop - geo.startTop;
+
+    const tx = deltaX * eased;
+    const ty = deltaY * eased;
+    const scale = lerp(1, 0.95, eased);
+
+    // while expanded, keep gradient transform; when near-collapsed we snap into final coords
+    siteTitle.style.transform = `translateX(-50%) translateX(${tx}px) translateY(${ty}px) scale(${scale})`;
+    siteTitle.style.left = (geo.startLeftCenter) + 'px';
+    siteTitle.style.top = geo.startTop + 'px';
+
+    // Smooth color transition: fade in the solid colored copy using eased progress
+    // titleSolid opacity moves from 0 -> 1 as eased goes 0 -> 1 (you can tweak power for slow/fast feel)
+    const blend = Math.pow(eased, 1.0); // tweak exponent to adjust rate
+    titleSolid.style.opacity = String(blend);
+
+    // Show content only after scrolling past the banner
+    if (progress > 0.3) {
+      content.classList.add('visible');
+      body.classList.add('scrolled');
+    } else {
+      content.classList.remove('visible');
+      body.classList.remove('scrolled');
+    }
+
+    if(progress < 0.95){
+      // maintain gradient clipping on main element while letting solid copy fade in gradually
+      siteTitle.style.webkitBackgroundClip = 'text';
+      siteTitle.style.backgroundClip = 'text';
+      siteTitle.style.color = 'transparent';
+      siteTitle.classList.remove('small');
+      document.body.classList.remove('title-collapsed');
+
+      // ensure site title sits behind the content while expanded
+      siteTitle.style.zIndex = 1490; // below main#content z-index (1500)
+      titleSolid.style.zIndex = 1495;
+
+    } else {
+      // Snap to final collapsed visual
+      siteTitle.style.webkitBackgroundClip = 'unset';
+      siteTitle.style.backgroundClip = 'unset';
+      siteTitle.style.color = 'var(--sky-blue)';
+      siteTitle.classList.add('small');
+      document.body.classList.add('title-collapsed');
+
+      // Use absolute left/top for final position so it sits perfectly beside the logo
+      siteTitle.style.left = geo.collapsedLeft + 'px';
+      siteTitle.style.top = geo.collapsedTop + 'px';
+      siteTitle.style.transform = 'none';
+      siteTitle.style.fontSize = COLLAPSED_FONT + 'px';
+
+      // show solid copy fully and bring title above header
+      titleSolid.style.opacity = '1';
+      siteTitle.style.zIndex = 1700; // above header
+      titleSolid.style.zIndex = 1705;
+    }
+  }
+
+  function recompute(){
+    geo = compute();
+    update();
+  }
+
+  // events
+  window.addEventListener('resize', recompute, { passive:true });
+  window.addEventListener('scroll', () => { requestAnimationFrame(update); }, { passive:true });
+  logo.addEventListener('load', recompute);
+
+  // initial
+  recompute();
+
+  // clicking siteTitle scrolls to top (prevents folder/opening)
+  siteTitle.addEventListener('click', function(e){
+    e.preventDefault();
+    window.scrollTo({ top:0, behavior:'smooth'});
+  });
+
+  // single click anywhere collapses to speed testing
+  function skipOnce(){ window.scrollTo({ top: geo.vh * COLLAPSE_VIEWPORTS + 2, behavior:'smooth' }); window.removeEventListener('click', skipOnce, true); }
+  window.addEventListener('click', skipOnce, { once:true, capture:true });
+
+  // respect reduced motion
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    document.body.classList.add('title-collapsed');
+    siteTitle.classList.add('small');
+    siteTitle.style.left = geo.collapsedLeft + 'px';
+    siteTitle.style.top = geo.collapsedTop + 'px';
+    siteTitle.style.transform = 'none';
+    siteTitle.style.fontSize = COLLAPSED_FONT + 'px';
+    siteTitle.style.webkitBackgroundClip = 'unset';
+    siteTitle.style.backgroundClip = 'unset';
+    siteTitle.style.color = 'var(--sky-blue)';
+    titleSolid.style.opacity = '1';
+    siteTitle.style.zIndex = 1700;
+    content.classList.add('visible');
+    body.classList.add('scrolled');
+  }
+})();
+</script>
+
+</body>
+</html>
